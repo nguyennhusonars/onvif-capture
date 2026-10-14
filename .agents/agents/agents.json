@@ -1,0 +1,20 @@
+{
+  "agents": [
+    {
+      "name": "onvif-protocol-specialist",
+      "description": "Specialist in ONVIF Profile M SOAP services (Device, Media1, Media2 ver20/media/wsdl, Analytics ver20/analytics/wsdl, RuleEngine, PullPoint Events), WS-Security Digest authentication, and XML schema parsing.",
+      "promptFile": "onvif_protocol_specialist.md"
+    },
+    {
+      "name": "rtsp-media-engineer",
+      "description": "Specialist in RFC 2326 RTSP over TCP interleaved streaming, HTTP Digest authentication, RTP vnd.onvif.metadata Marker-bit packet reassembly, and low-latency ffmpeg RGB24 video decoding.",
+      "promptFile": "rtsp_media_engineer.md"
+    },
+    {
+      "name": "pyside6-ui-specialist",
+      "description": "Specialist in PySide6 (Qt6) desktop UI architecture, multi-threaded QObject signal/slot design, QPainter normalized [0, 1] bounding-box overlays, and interactive table/tree inspectors.",
+      "promptFile": "pyside6_ui_specialist.md"
+    }
+  ]
+}
+

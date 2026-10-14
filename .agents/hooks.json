@@ -1,0 +1,33 @@
+{
+  "camera-safety-gate": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 hooks/safety_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "post-edit-linter": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 hooks/post_edit_lint.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+
