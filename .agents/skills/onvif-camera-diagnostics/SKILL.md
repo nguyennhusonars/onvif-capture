@@ -12,16 +12,24 @@ Follow this procedure to inspect an IP camera's ONVIF Profile M capabilities and
 
 ## Steps
 
-1. **Run the Camera Probe Script:**
+1. **Auto-Discover Camera Endpoint (Optional):**
+   If the camera's IP or port is unknown, run the discovery scanner first:
+   ```bash
+   python3 .agents/skills/ws-discovery/scripts/scan_cameras.py
+   ```
+
+2. **Run the Camera Probe Script:**
    Execute [`probe_camera.py`](./scripts/probe_camera.py) from the repository root:
    ```bash
-   python3 .agents/skills/onvif-camera-diagnostics/scripts/probe_camera.py --host 192.169.1.64 --port 8000 --user admin --password "Pavana@123" --enable-metadata
+   python3 .agents/skills/onvif-camera-diagnostics/scripts/probe_camera.py --host 192.168.1.100 --port 8000 --user admin --password "admin" --enable-metadata
    ```
-2. **Verify Profile M Readiness:**
+
+3. **Verify Profile M Readiness:**
    Confirm in the JSON output that:
    * `"is_profile_m": true` (`onvif://www.onvif.org/Profile/M` present in `scopes`).
    * `"analytics_enabled": true` and `"events_enabled": true` in `MetadataConfiguration`.
    * Both `MainStream` (`rtsp://<ip>:554/stream0`) and `SubStream` (`rtsp://<ip>:554/stream1`) are listed.
-3. **Reference Knowledge:**
-   See [pavana_v_security_profile_m_spec.md](../../knowledge/pavana_v_security_profile_m_spec.md) for the expected baseline inventory of the PAVANA V-Security camera.
 
+4. **Reference Documentation:**
+   * See [docs/onvif_profile_m_spec.md](../../../docs/onvif_profile_m_spec.md) for Profile M protocol rules.
+   * See [reference_profile_m_camera_spec.md](../../knowledge/reference_profile_m_camera_spec.md) for standard camera profile parameters.

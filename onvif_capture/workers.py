@@ -9,6 +9,8 @@ import time
 from typing import Callable, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
+import requests
+
 from .client import ONVIFProfileMClient
 from .models import CapturedMetadataItem
 from .parsers import parse_metadata_stream_xml, parse_notification_element
@@ -347,9 +349,7 @@ class ONVIFPullPointWorker(threading.Thread):
                         if notifs:
                             batch: List[CapturedMetadataItem] = []
                             for notif_el in notifs:
-                                item = parse_notification_element(notif_el, channel="ONVIF PullPoint")
-                                if item:
-                                    batch.append(item)
+                                batch.extend(parse_notification_element(notif_el, channel="ONVIF PullPoint"))
                             if batch:
                                 self.on_items(batch)
                     except (requests.exceptions.Timeout, socket.timeout):

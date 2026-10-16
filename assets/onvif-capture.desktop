@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ONVIF Inspector
+GenericName=ONVIF Profile M Inspector
+Comment=Inspect, capture, and visualize ONVIF Profile M AI analytics and alarms
+Exec=/usr/bin/onvif-capture
+Icon=onvif-capture
+Terminal=false
+Categories=Video;AudioVideo;
+Keywords=onvif;camera;cctv;ai;metadata;profile-m;rtsp;surveillance;
+StartupWMClass=onvif-capture

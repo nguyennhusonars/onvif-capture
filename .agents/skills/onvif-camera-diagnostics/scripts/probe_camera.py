@@ -15,10 +15,10 @@ from onvif_capture.client import ONVIFProfileMClient
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Probe ONVIF Profile M camera inventory")
-    parser.add_argument("--host", default="192.169.1.197")
+    parser.add_argument("--host", default="192.168.1.100")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--user", default="admin")
-    parser.add_argument("--password", default="Pavana@123")
+    parser.add_argument("--password", default="")
     parser.add_argument("--enable-metadata", action="store_true", help="Enable Analytics=true & Events in MetadataConfiguration")
     args = parser.parse_args()
 

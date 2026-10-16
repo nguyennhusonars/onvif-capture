@@ -19,11 +19,11 @@ from onvif_capture.workers import ONVIFPullPointWorker, RTSPMetadataStreamWorker
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Capture ONVIF Profile M RTSP metadata and PullPoint events")
-    parser.add_argument("--host", default="192.169.1.197")
+    parser.add_argument("--host", default="192.168.1.100")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--rtsp-uri", default="rtsp://192.169.1.197:554/stream0")
+    parser.add_argument("--rtsp-uri", default="rtsp://192.168.1.100:554/stream0")
     parser.add_argument("--user", default="admin")
-    parser.add_argument("--password", default="Pavana@123")
+    parser.add_argument("--password", default="")
     parser.add_argument("--duration", type=float, default=6.0)
     parser.add_argument("--include-heartbeats", action="store_true")
     args = parser.parse_args()

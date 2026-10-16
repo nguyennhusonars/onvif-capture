@@ -34,5 +34,16 @@ class CapturedMetadataItem:
     source_items: Dict[str, Any] = field(default_factory=dict)
     data_items: Dict[str, Any] = field(default_factory=dict)
     image_bytes: Optional[bytes] = None
+    template_bytes: Optional[bytes] = None
     raw_xml: str = ""
+    is_fallback_snapshot: bool = False
+    thumbnail_pixmap: Optional[Any] = None
+
+    @property
+    def has_embedded_image(self) -> bool:
+        return self.image_bytes is not None and len(self.image_bytes) > 0
+
+    @property
+    def has_template(self) -> bool:
+        return self.template_bytes is not None and len(self.template_bytes) > 0
 

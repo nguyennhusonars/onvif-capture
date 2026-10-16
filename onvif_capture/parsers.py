@@ -22,7 +22,15 @@ def clean_xml_string(elem: etree._Element, truncate_base64: bool = True) -> str:
         for b64 in elem.xpath(".//*[local-name()='base64Binary']"):
             if b64.text and len(b64.text) > 120:
                 saved_b64.append((b64, b64.text))
-                b64.text = f"{b64.text[:60]}... [base64 JPEG: {len(b64.text)} chars] ...{b64.text[-30:]}"
+                parent_name = ""
+                parent = b64.getparent()
+                while parent is not None:
+                    if parent.get("Name"):
+                        parent_name = parent.get("Name")
+                        break
+                    parent = parent.getparent()
+                tag_label = f"base64 {parent_name}" if parent_name else "base64Binary"
+                b64.text = f"{b64.text[:60]}... [{tag_label}: {len(b64.text)} chars] ...{b64.text[-30:]}"
     try:
         etree.cleanup_namespaces(elem)
         return etree.tostring(elem, encoding="unicode", pretty_print=True).strip()
@@ -37,9 +45,9 @@ def normalize_bbox(
     """
     Convert bounding box to normalized top-left [0.0, 1.0] screen coordinates (x1, y1, x2, y2).
     Handles both:
-      - [0, 1] normalized coordinates (used by PAVANA <tt:VideoAnalytics><tt:Frame><tt:Object>)
+      - [0, 1] normalized coordinates (standard ONVIF Profile M <tt:VideoAnalytics><tt:Frame><tt:Object>)
       - [-1, 1] ONVIF normalized coordinates (x in [-1, 1] left-to-right, y in [-1, 1] bottom-to-top,
-        used by PAVANA <tt:Event><tt:ElementItem Name="BoundingBox"><tt:Rectangle>)
+        standard ONVIF <tt:Event><tt:ElementItem Name="BoundingBox"><tt:Rectangle>)
     """
     if is_signed_onvif is None:
         is_signed_onvif = any(v < -0.001 for v in (left, top, right, bottom)) or (top > bottom and top > 0)
@@ -135,102 +143,115 @@ def parse_appearance_element(
     return class_type, likelihood, raw_bbox, attrs
 
 
-def parse_notification_element(
-    notif_elem: etree._Element, channel: str = "ONVIF PullPoint"
-) -> Optional[CapturedMetadataItem]:
-    """Parse a <wsnt:NotificationMessage> XML element including all SimpleItem and ElementItem fields."""
-    topic_el = notif_elem.xpath(".//*[local-name()='Topic']")
-    topic = topic_el[0].text.strip() if topic_el and topic_el[0].text else "UnknownTopic"
-
-    msg_el_list = notif_elem.xpath(".//*[local-name()='Message']/*[local-name()='Message']")
-    if not msg_el_list:
-        msg_el_list = notif_elem.xpath(".//*[local-name()='Message']")
-    if not msg_el_list:
-        return None
-    msg_el = msg_el_list[0]
-
-    utc_time = msg_el.get("UtcTime") or ""
-    if not utc_time:
-        utc_nodes = notif_elem.xpath(".//@UtcTime")
-        utc_time = utc_nodes[0] if utc_nodes else ""
-
-    prop_op = msg_el.get("PropertyOperation") or ""
-    if not prop_op:
-        op_nodes = notif_elem.xpath(".//@PropertyOperation")
-        prop_op = op_nodes[0] if op_nodes else ""
-
-    source_items: Dict[str, Any] = {}
+def _parse_items_from_element_group(
+    items_list: List[etree._Element],
+    topic: str,
+    utc_time: str,
+    prop_op: str,
+    source_items: Dict[str, Any],
+    channel: str,
+    raw_node: etree._Element,
+) -> CapturedMetadataItem:
     data_items: Dict[str, Any] = {}
     image_bytes: Optional[bytes] = None
+    template_bytes: Optional[bytes] = None
     bbox: Optional[Tuple[float, float, float, float]] = None
     likelihood: Optional[float] = None
     object_id = ""
 
-    for sec_name, target in (("Source", source_items), ("Data", data_items)):
-        sec_nodes = msg_el.xpath(f"./*[local-name()='{sec_name}']")
-        if not sec_nodes:
-            sec_nodes = notif_elem.xpath(f".//*[local-name()='{sec_name}']")
-        if not sec_nodes:
-            continue
-        sec_node = sec_nodes[0]
-        for item in sec_node:
-            iname = local_name(item.tag)
-            attr_name = item.get("Name") or iname
-            if iname == "SimpleItem":
-                val = item.get("Value", "")
-                target[attr_name] = val
-                if attr_name.lower() == "likelihood":
-                    try:
-                        likelihood = float(val)
-                    except ValueError:
-                        pass
-            elif iname == "ElementItem":
-                if attr_name.lower() == "image" or item.xpath(".//*[local-name()='base64Binary']"):
-                    b64_el = item.xpath(".//*[local-name()='base64Binary']")
-                    if b64_el and b64_el[0].text:
-                        b64_txt = b64_el[0].text.strip()
-                        try:
-                            image_bytes = base64.b64decode(b64_txt)
-                            target[attr_name] = f"<JPEG Snapshot: {len(image_bytes):,} bytes>"
-                        except Exception:
-                            target[attr_name] = f"<base64Binary: {len(b64_txt)} chars>"
-                elif attr_name.lower() == "boundingbox" or item.xpath(
-                    ".//*[local-name()='Rectangle'] | .//*[local-name()='BoundingBox']"
-                ):
-                    rect_el = item.xpath(".//*[local-name()='Rectangle'] | .//*[local-name()='BoundingBox']")
-                    if rect_el:
-                        r = rect_el[0]
-                        try:
-                            raw_r = {
-                                "left": float(r.get("left", "0")),
-                                "top": float(r.get("top", "0")),
-                                "right": float(r.get("right", "0")),
-                                "bottom": float(r.get("bottom", "0")),
-                            }
-                            target[attr_name] = raw_r
-                            bbox = normalize_bbox(
-                                raw_r["left"], raw_r["top"], raw_r["right"], raw_r["bottom"], is_signed_onvif=True
-                            )
-                        except ValueError:
-                            target[attr_name] = dict(r.attrib)
-                elif len(item) > 0:
-                    child = item[0]
-                    if len(child) == 0 and child.text:
-                        val_txt = child.text.strip()
-                        target[attr_name] = val_txt
-                        if attr_name.lower() == "objectid":
-                            object_id = val_txt
+    for item in items_list:
+        iname = local_name(item.tag)
+        attr_name = (item.get("Name") or "").strip()
+        if not attr_name:
+            if iname != "SimpleItem":
+                attr_name = iname
+            else:
+                continue
+
+        if iname == "SimpleItem":
+            val = item.get("Value", "")
+            data_items[attr_name] = val
+            if attr_name.lower() == "likelihood":
+                try:
+                    likelihood = float(val)
+                except ValueError:
+                    pass
+            elif attr_name.lower() == "objectid" and not object_id:
+                object_id = str(val)
+
+        elif iname == "ElementItem":
+            b64_el = item.xpath(".//*[local-name()='base64Binary']")
+            b64_txt = (
+                b64_el[0].text.strip()
+                if (b64_el and b64_el[0].text)
+                else (item.text.strip() if item.text else "")
+            )
+            is_template_name = any(
+                t in attr_name.lower() for t in ("template", "feature", "embedding", "biometric", "descriptor")
+            )
+            is_image_name = any(
+                t in attr_name.lower() for t in ("image", "snapshot", "picture", "photo", "thumbnail")
+            )
+
+            if b64_txt and (is_image_name or is_template_name or b64_el):
+                try:
+                    decoded_data = base64.b64decode(b64_txt)
+                    is_jpeg = decoded_data.startswith(b"\xff\xd8") or (b"\xff\xd8" in decoded_data[:64])
+                    is_png = decoded_data.startswith(b"\x89PNG")
+
+                    if (is_jpeg or is_png or is_image_name) and not is_template_name:
+                        if not decoded_data.startswith(b"\xff\xd8") and is_jpeg:
+                            idx = decoded_data.find(b"\xff\xd8")
+                            if idx > 0:
+                                decoded_data = decoded_data[idx:]
+                        if image_bytes is None or attr_name.lower() == "image":
+                            image_bytes = decoded_data
+                        img_fmt = "PNG" if is_png else "JPEG"
+                        data_items[attr_name] = f"<{img_fmt} Snapshot: {len(decoded_data):,} bytes>"
                     else:
-                        nested: Dict[str, Any] = {}
-                        for sub in child.iter():
-                            if sub is child:
-                                continue
-                            if len(sub) == 0 and sub.text and sub.text.strip():
-                                lk = sub.get("Likelihood")
-                                nested[local_name(sub.tag)] = (
-                                    f"{sub.text.strip()} ({float(lk):.2f})" if lk else sub.text.strip()
-                                )
-                        target[attr_name] = nested if nested else dict(child.attrib)
+                        template_bytes = decoded_data
+                        data_items[attr_name] = f"<Biometric Template: {len(decoded_data):,} bytes>"
+                except Exception:
+                    data_items[attr_name] = f"<base64Binary ({attr_name}): {len(b64_txt)} chars>"
+
+            elif attr_name.lower() == "boundingbox" or item.xpath(
+                ".//*[local-name()='Rectangle'] | .//*[local-name()='BoundingBox']"
+            ):
+                rect_el = item.xpath(".//*[local-name()='Rectangle'] | .//*[local-name()='BoundingBox']")
+                if rect_el:
+                    r = rect_el[0]
+                    try:
+                        raw_r = {
+                            "left": float(r.get("left", "0")),
+                            "top": float(r.get("top", "0")),
+                            "right": float(r.get("right", "0")),
+                            "bottom": float(r.get("bottom", "0")),
+                        }
+                        data_items[attr_name] = raw_r
+                        bbox = normalize_bbox(
+                            raw_r["left"], raw_r["top"], raw_r["right"], raw_r["bottom"], is_signed_onvif=True
+                        )
+                    except ValueError:
+                        data_items[attr_name] = dict(r.attrib)
+
+            elif len(item) > 0:
+                child = item[0]
+                if len(child) == 0 and child.text:
+                    val_txt = child.text.strip()
+                    data_items[attr_name] = val_txt
+                    if attr_name.lower() == "objectid":
+                        object_id = val_txt
+                else:
+                    nested: Dict[str, Any] = {}
+                    for sub in child.iter():
+                        if sub is child:
+                            continue
+                        if len(sub) == 0 and sub.text and sub.text.strip():
+                            lk = sub.get("Likelihood")
+                            nested[local_name(sub.tag)] = (
+                                f"{sub.text.strip()} ({float(lk):.2f})" if lk else sub.text.strip()
+                            )
+                    data_items[attr_name] = nested if nested else dict(child.attrib)
 
     rule_name = (
         source_items.get("Rule")
@@ -247,7 +268,9 @@ def parse_notification_element(
     summary_parts = []
     for k, v in data_items.items():
         if k == "Image":
-            summary_parts.append("📷 Snapshot")
+            summary_parts.append("Snapshot")
+        elif k in ("Template", "Feature", "Embedding"):
+            summary_parts.append("Embedding")
         elif k == "BoundingBox" and isinstance(v, dict):
             summary_parts.append(
                 f"BBox[{v.get('left', 0):.2f},{v.get('top', 0):.2f},{v.get('right', 0):.2f},{v.get('bottom', 0):.2f}]"
@@ -285,8 +308,103 @@ def parse_notification_element(
         source_items=source_items,
         data_items=data_items,
         image_bytes=image_bytes,
-        raw_xml=clean_xml_string(notif_elem, truncate_base64=True),
+        template_bytes=template_bytes,
+        raw_xml=clean_xml_string(raw_node, truncate_base64=True),
     )
+
+
+def parse_notification_element(
+    notif_elem: etree._Element, channel: str = "ONVIF PullPoint"
+) -> List[CapturedMetadataItem]:
+    """
+    Parse a <wsnt:NotificationMessage> (or <tt:Event>) XML element into CapturedMetadataItems.
+    Robustly handles multi-message notifications, multiple <tt:Data> blocks, and simultaneous
+    multi-object detections without dropping simultaneous events.
+    """
+    topic_el = notif_elem.xpath(".//*[local-name()='Topic']")
+    topic = topic_el[0].text.strip() if topic_el and topic_el[0].text else "UnknownTopic"
+
+    msg_el_list = notif_elem.xpath("./*[local-name()='Message']/*[local-name()='Message']")
+    if not msg_el_list:
+        msg_el_list = notif_elem.xpath("./*[local-name()='Message']")
+    if not msg_el_list:
+        msg_el_list = [notif_elem]
+
+    results: List[CapturedMetadataItem] = []
+
+    for msg_el in msg_el_list:
+        utc_time = msg_el.get("UtcTime") or ""
+        if not utc_time:
+            utc_nodes = notif_elem.xpath(".//@UtcTime")
+            utc_time = utc_nodes[0] if utc_nodes else ""
+
+        prop_op = (msg_el.get("PropertyOperation") or "").strip()
+        if not prop_op:
+            op_nodes = notif_elem.xpath(".//@PropertyOperation")
+            prop_op = (op_nodes[0] if op_nodes else "").strip()
+
+        source_items: Dict[str, Any] = {}
+        src_nodes = msg_el.xpath("./*[local-name()='Source']") or notif_elem.xpath(".//*[local-name()='Source']")
+        for src in src_nodes:
+            for item in src:
+                iname = local_name(item.tag)
+                attr_name = (item.get("Name") or "").strip()
+                if not attr_name:
+                    if iname != "SimpleItem":
+                        attr_name = iname
+                    else:
+                        continue
+                if iname == "SimpleItem":
+                    source_items[attr_name] = item.get("Value", "")
+                elif iname == "ElementItem" and item.text:
+                    source_items[attr_name] = item.text.strip()
+
+        data_nodes = msg_el.xpath("./*[local-name()='Data']")
+        if not data_nodes:
+            data_nodes = notif_elem.xpath("./*[local-name()='Data']")
+        if not data_nodes:
+            data_nodes = [None]
+
+        for dn in data_nodes:
+            if dn is not None:
+                obj_els = dn.xpath(
+                    './*[local-name()=\'ElementItem\'][translate(@Name, "OBJECTID", "objectid")=\'objectid\']'
+                )
+                if len(obj_els) > 1:
+                    # Simultaneous multiple objects within a single Data element
+                    common_items = []
+                    current_items = None
+                    groups = []
+                    for item in dn:
+                        name = (item.get("Name") or "").lower()
+                        if name == "objectid":
+                            if current_items is not None:
+                                groups.append(common_items + current_items)
+                            current_items = [item]
+                        elif current_items is None:
+                            common_items.append(item)
+                        else:
+                            current_items.append(item)
+                    if current_items is not None:
+                        groups.append(common_items + current_items)
+
+                    for grp in groups:
+                        item_obj = _parse_items_from_element_group(
+                            grp, topic, utc_time, prop_op, source_items, channel, dn
+                        )
+                        results.append(item_obj)
+                else:
+                    item_obj = _parse_items_from_element_group(
+                        list(dn), topic, utc_time, prop_op, source_items, channel, dn if len(data_nodes) > 1 else msg_el
+                    )
+                    results.append(item_obj)
+            else:
+                item_obj = _parse_items_from_element_group(
+                    [], topic, utc_time, prop_op, source_items, channel, msg_el
+                )
+                results.append(item_obj)
+
+    return results
 
 
 def _parse_single_metadata_root(root: etree._Element) -> List[CapturedMetadataItem]:
@@ -369,10 +487,13 @@ def _parse_single_metadata_root(root: etree._Element) -> List[CapturedMetadataIt
         )
 
     # 2. Check NotificationMessages inside the RTSP metadata stream
-    for notif in root.xpath(".//*[local-name()='NotificationMessage']"):
-        ev_item = parse_notification_element(notif, channel="RTSP Metadata (Event)")
-        if ev_item:
-            items.append(ev_item)
+    notif_nodes = root.xpath(".//*[local-name()='NotificationMessage']")
+    if notif_nodes:
+        for notif in notif_nodes:
+            items.extend(parse_notification_element(notif, channel="RTSP Metadata (Event)"))
+    else:
+        for ev in root.xpath(".//*[local-name()='Event']"):
+            items.extend(parse_notification_element(ev, channel="RTSP Metadata (Event)"))
 
     return items
 

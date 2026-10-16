@@ -16,9 +16,12 @@ Use this skill to capture real-time `<tt:MetadataStream>` XML frames from `rtsp:
    ```bash
    python3 .agents/skills/rtsp-metadata-capture/scripts/capture_cli.py --duration 10 --include-heartbeats
    ```
+
 2. **Verify Multi-Packet RTP Reassembly & Parsing:**
    * Check that `RTSPMetadataStreamWorker` reports `RTSP metadata active (rtsp://192.169.1.64:554/stream0/metadata)`.
    * Verify that `<tt:VideoAnalytics>` frames and `<tt:Event>` frames parse cleanly into `CapturedMetadataItem` instances.
-3. **Reference Schemas:**
-   Consult [rtsp_metadata_xml_schemas.md](../../knowledge/rtsp_metadata_xml_schemas.md) for the exact `<tt:VideoAnalytics>` and `<tt:Event>` XML structures and coordinate transformation math.
+   * Ensure simultaneous multi-target alarms are unbundled without dropping concurrent detections.
 
+3. **Reference Schemas & Architecture:**
+   * Consult [docs/architecture.md](../../../docs/architecture.md) for RTP reassembly and memory models.
+   * Consult [docs/onvif_profile_m_spec.md](../../../docs/onvif_profile_m_spec.md) for `<tt:VideoAnalytics>` and `<tt:Event>` XML schemas.

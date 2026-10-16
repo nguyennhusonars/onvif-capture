@@ -9,21 +9,48 @@ from zeep.wsse.username import UsernameToken
 from .parsers import clean_xml_string, local_name
 
 
+import os
+import sys
+
+def _resolve_wsdl_dir() -> Optional[str]:
+    candidates = []
+    # If running in a PyInstaller bundle
+    if getattr(sys, "frozen", False):
+        if hasattr(sys, "_MEIPASS"):
+            candidates.append(os.path.join(sys._MEIPASS, "wsdl"))
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "wsdl"))
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "_internal", "wsdl"))
+    # System or standard python paths
+    candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "wsdl"))
+    candidates.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "wsdl"))
+    candidates.append("/opt/onvif-capture/wsdl")
+    candidates.append("/opt/onvif-capture/_internal/wsdl")
+    candidates.append("/usr/share/onvif-capture/wsdl")
+    for c in candidates:
+        if os.path.isdir(c) and os.path.isfile(os.path.join(c, "devicemgmt.wsdl")):
+            return c
+    return None
+
+
 class ONVIFProfileMClient:
     """Client for inspecting, configuring, and verifying ONVIF Profile M AI metadata and events."""
 
-    def __init__(self, host: str, port: int, username: str, password: str):
+    def __init__(self, host: str, port: int, username: str, password: str, wsdl_dir: Optional[str] = None):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
+        self.wsdl_dir = wsdl_dir or _resolve_wsdl_dir()
         self.cam: Optional[ONVIFCamera] = None
         self.wsse = UsernameToken(username, password, use_digest=True)
         self.xaddrs: Dict[str, str] = {}
         self.session = requests.Session()
 
     def connect(self) -> Dict[str, Any]:
-        self.cam = ONVIFCamera(self.host, self.port, self.username, self.password)
+        if self.wsdl_dir:
+            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password, wsdl_dir=self.wsdl_dir)
+        else:
+            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password)
         self.xaddrs = {}
         for svc in self.cam.devicemgmt.GetServices({"IncludeCapability": False}):
             self.xaddrs[svc.Namespace] = svc.XAddr

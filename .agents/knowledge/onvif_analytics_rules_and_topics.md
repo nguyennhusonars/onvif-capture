@@ -7,7 +7,7 @@ All 9 modules below are instantiated in `VideoAnalyticsConfigurationName_1` (`Vi
 | Active Module Name | ONVIF Module Type | Parent Event Topic | Event Data (`SimpleItem`) | Event Data (`ElementItem`) |
 | :--- | :--- | :--- | :--- | :--- |
 | `MyMotionRegionDetector0` | `tt:MotionRegionDetector` | `tns1:RuleEngine/MotionRegionDetector/Motion` | `State (xs:boolean)` | — |
-| `MyFaceRecognitionModule0` | `tt:FaceRecognition` | `tns1:RuleEngine/Recognition/Face` | `EnrollmentID (xs:string)`, `Likelihood (xs:float)` | *(Live events also include `ObjectId`, `BoundingBox`, `Image`)* |
+| `MyFaceRecognitionModule0` | `tt:FaceRecognition` | `tns1:RuleEngine/Recognition/Face` | `EnrollmentID (xs:string)`, `Likelihood (xs:float)` | *(Live events include `ObjectId`, `BoundingBox`, `Image` [JPEG], `Template` [base64 biometric embedding])* |
 | `MyFaceDetectionModule0` | `tt:FaceDetection` | `tns1:RuleEngine/FaceDetector/Detected` | `State (xs:boolean)` | *(Live events also include `ObjectId`, `BoundingBox`, `Image`)* |
 | `MyCrowdDetectionModule0` | `tt:CrowdDetection` | `tns1:RuleEngine/Detection/Crowd` | `State (xs:boolean)` | — |
 | `MyIntrusionDetectionModule0` | `tt:IntrusionDetection` | `tns1:RuleEngine/Detection/Intrusion` | `State (xs:boolean)` / `Likelihood (xs:float)` | `ObjectId`, `BoundingBox`, `Image` (`xs:base64Binary`) |

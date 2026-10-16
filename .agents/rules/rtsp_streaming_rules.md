@@ -1,7 +1,7 @@
 # RTSP Metadata & Video Streaming Rules
 
-1. **RTSP HTTP Digest Authentication (`realm="mkvision"`):**
-   * The camera's RTSP server (`Custom RTSP server 4.4` on port `554`) requires RFC 2617 Digest Authentication (`MD5(MD5(user:realm:pass):nonce:MD5(method:uri))`).
+1. **RTSP HTTP Digest Authentication:**
+   * The camera's RTSP server requires RFC 2617 Digest Authentication (`MD5(MD5(user:realm:pass):nonce:MD5(method:uri))`).
    * Always handle `401 Unauthorized` on `DESCRIBE` by extracting `realm` and `nonce` from `WWW-Authenticate` and signing subsequent `DESCRIBE`, `SETUP`, `PLAY`, and `GET_PARAMETER` requests.
 2. **Interleaved TCP Transport (`RTP/AVP/TCP;unicast;interleaved=0-1`):**
    * Always use TCP interleaved mode for `rtsp://<ip>:554/stream0/metadata` (`a=rtpmap:98 vnd.onvif.metadata/90000`) to avoid UDP firewall/NAT drops and packet reordering.
