@@ -381,3 +381,22 @@ def test_parse_metadata_stream_corrupted_xml_graceful():
 
     items_empty = parse_metadata_stream_xml(b"")
     assert items_empty == []
+
+
+def test_nat_and_port_forwarding_rewriting():
+    """Verify NAT XAddr and custom RTSP port rewrites for cameras behind port forwarding."""
+    from onvif_capture.client import _rewrite_rtsp_uri, _rewrite_url
+
+    # SOAP Service XAddr rewrite
+    internal_xaddr = "http://193.169.0.2:8000/onvif/media2_service"
+    rewritten_xaddr = _rewrite_url(internal_xaddr, "14.224.145.111", 8001)
+    assert rewritten_xaddr == "http://14.224.145.111:8001/onvif/media2_service"
+
+    # RTSP URI rewrite with custom forwarded RTSP port (551, 552)
+    internal_rtsp = "rtsp://193.169.0.2:554/stream0"
+    rewritten_rtsp = _rewrite_rtsp_uri(internal_rtsp, "14.224.145.111", 551)
+    assert rewritten_rtsp == "rtsp://14.224.145.111:551/stream0"
+
+    # Without port override, keep internal port or default
+    rewritten_rtsp_default = _rewrite_rtsp_uri(internal_rtsp, "14.224.145.111", None)
+    assert rewritten_rtsp_default == "rtsp://14.224.145.111:554/stream0"

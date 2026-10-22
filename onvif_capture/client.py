@@ -1,4 +1,7 @@
 from typing import Any, Dict, List, Optional
+import os
+import sys
+import urllib.parse
 
 import requests
 from lxml import etree
@@ -9,8 +12,24 @@ from zeep.wsse.username import UsernameToken
 from .parsers import clean_xml_string, local_name
 
 
-import os
-import sys
+def _rewrite_url(url: str, new_host: str, new_port: int) -> str:
+    """Rewrite host and port of an HTTP/SOAP URL (for cameras behind NAT / port forwarding)."""
+    if not url:
+        return url
+    parsed = urllib.parse.urlparse(url)
+    netloc = f"{new_host}:{new_port}"
+    return urllib.parse.urlunparse(parsed._replace(netloc=netloc))
+
+
+def _rewrite_rtsp_uri(uri: str, new_host: str, new_port: Optional[int] = None) -> str:
+    """Rewrite RTSP stream URI host and optional forwarded RTSP port."""
+    if not uri:
+        return uri
+    parsed = urllib.parse.urlparse(uri)
+    port = new_port if new_port is not None else parsed.port
+    port_str = f":{port}" if port else ""
+    netloc = f"{new_host}{port_str}"
+    return urllib.parse.urlunparse(parsed._replace(netloc=netloc))
 
 def _resolve_wsdl_dir() -> Optional[str]:
     candidates = []
@@ -35,12 +54,21 @@ def _resolve_wsdl_dir() -> Optional[str]:
 class ONVIFProfileMClient:
     """Client for inspecting, configuring, and verifying ONVIF Profile M AI metadata and events."""
 
-    def __init__(self, host: str, port: int, username: str, password: str, wsdl_dir: Optional[str] = None):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        username: str,
+        password: str,
+        wsdl_dir: Optional[str] = None,
+        rtsp_port: Optional[int] = None,
+    ):
         self.host = host
         self.port = port
         self.username = username
         self.password = password
         self.wsdl_dir = wsdl_dir or _resolve_wsdl_dir()
+        self.rtsp_port = rtsp_port
         self.cam: Optional[ONVIFCamera] = None
         self.wsse = UsernameToken(username, password, use_digest=True)
         self.xaddrs: Dict[str, str] = {}
@@ -48,12 +76,18 @@ class ONVIFProfileMClient:
 
     def connect(self) -> Dict[str, Any]:
         if self.wsdl_dir:
-            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password, wsdl_dir=self.wsdl_dir)
+            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password, wsdl_dir=self.wsdl_dir, adjust_time=True)
         else:
-            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password)
+            self.cam = ONVIFCamera(self.host, self.port, self.username, self.password, adjust_time=True)
+
+        # Normalize onvif-zeep service xaddrs for NAT/port-forwarded cameras
+        if self.cam and hasattr(self.cam, "xaddrs"):
+            for ns, addr in list(self.cam.xaddrs.items()):
+                self.cam.xaddrs[ns] = _rewrite_url(addr, self.host, self.port)
+
         self.xaddrs = {}
         for svc in self.cam.devicemgmt.GetServices({"IncludeCapability": False}):
-            self.xaddrs[svc.Namespace] = svc.XAddr
+            self.xaddrs[svc.Namespace] = _rewrite_url(svc.XAddr, self.host, self.port)
         return self.get_full_inventory()
 
     def soap_call(self, service_url: str, body_xml: str, timeout: float = 6.0) -> etree._Element:
@@ -129,7 +163,7 @@ class ONVIFProfileMClient:
                     "encoding": p.VideoEncoderConfiguration.Encoding
                     if getattr(p, "VideoEncoderConfiguration", None)
                     else "",
-                    "rtsp_uri": uri_obj.Uri,
+                    "rtsp_uri": _rewrite_rtsp_uri(uri_obj.Uri, self.host, self.rtsp_port),
                 }
             )
 

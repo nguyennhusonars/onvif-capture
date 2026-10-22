@@ -414,8 +414,15 @@ class ONVIFProfileMWindow(QMainWindow):
 
         conn_layout.addWidget(QLabel("Port:"))
         self.port_edit = QLineEdit("8000")
-        self.port_edit.setFixedWidth(50)
+        self.port_edit.setToolTip("ONVIF HTTP port (e.g. 8000, or 8001/8002)")
+        self.port_edit.setFixedWidth(48)
         conn_layout.addWidget(self.port_edit)
+
+        conn_layout.addWidget(QLabel("RTSP:"))
+        self.rtsp_port_edit = QLineEdit("554")
+        self.rtsp_port_edit.setToolTip("RTSP stream port (e.g. 554, or 551/552 if forwarded)")
+        self.rtsp_port_edit.setFixedWidth(45)
+        conn_layout.addWidget(self.rtsp_port_edit)
 
         conn_layout.addWidget(QLabel("User:"))
         self.user_edit = QLineEdit("admin")
@@ -737,6 +744,7 @@ class ONVIFProfileMWindow(QMainWindow):
             self.disconnect_camera()
         self.ip_edit.setText(cam.ip)
         self.port_edit.setText(str(cam.port))
+        self.rtsp_port_edit.setText("554")
         self.connect_camera()
 
     def toggle_connection(self) -> None:
@@ -748,6 +756,8 @@ class ONVIFProfileMWindow(QMainWindow):
     def connect_camera(self) -> None:
         host = self.ip_edit.text().strip()
         port = int(self.port_edit.text().strip() or "8000")
+        rtsp_port_str = self.rtsp_port_edit.text().strip()
+        rtsp_port = int(rtsp_port_str) if rtsp_port_str else None
         user = self.user_edit.text().strip()
         pwd = self.pass_edit.text()
 
@@ -756,15 +766,18 @@ class ONVIFProfileMWindow(QMainWindow):
 
         def _connect_task() -> None:
             try:
-                client = ONVIFProfileMClient(host, port, user, pwd)
+                client = ONVIFProfileMClient(host, port, user, pwd, rtsp_port=rtsp_port)
                 inv = client.connect()
                 if self.enable_analytics_cb.isChecked() and (
                     not inv["analytics_enabled"] or not inv["events_enabled"]
                 ):
-                    updated_mc = client.set_metadata_analytics_enabled(True, True)
-                    inv["metadata_config"] = updated_mc
-                    inv["analytics_enabled"] = True
-                    inv["events_enabled"] = True
+                    try:
+                        updated_mc = client.set_metadata_analytics_enabled(True, True)
+                        inv["metadata_config"] = updated_mc
+                        inv["analytics_enabled"] = True
+                        inv["events_enabled"] = True
+                    except Exception as mc_err:
+                        print(f"[WARN] Could not auto-enable MetadataConfiguration: {mc_err}", flush=True)
                 self.client = client
                 self.signals.inventory_ready.emit(inv)
             except Exception as exc:
@@ -1246,7 +1259,9 @@ class ONVIFProfileMWindow(QMainWindow):
         self.profile_m_badge.setStyleSheet(
             "background-color: #21262d; color: #f85149; border: 1px solid #f85149; padding: 3px 10px; border-radius: 12px; font-weight: 600; font-size: 11px;"
         )
-        self.status_bar.showMessage(err, 8000)
+        self.profile_m_badge.setToolTip(err)
+        self.status_bar.showMessage(err, 15000)
+        print(f"[ONVIF Error] {err}", flush=True)
 
     def closeEvent(self, event: Any) -> None:
         self.disconnect_camera()

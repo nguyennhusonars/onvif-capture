@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Entry point for the ONVIF Profile M Native AI Analytics & Metadata Inspector GUI."""
 
+import sys
 from pathlib import Path
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication

@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from typing import Callable, List, Optional, Tuple
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urlunparse
 
 import requests
 
@@ -319,6 +319,9 @@ class ONVIFPullPointWorker(threading.Thread):
                 if not addr_els or not addr_els[0].text:
                     raise RuntimeError("No SubscriptionReference Address returned by camera")
                 sub_addr = addr_els[0].text.strip()
+                # Rewrite subscription address in case camera reported its internal LAN IP
+                parsed_sub = urlparse(sub_addr)
+                sub_addr = urlunparse(parsed_sub._replace(netloc=f"{self.host}:{self.port}"))
                 self.on_status(f"ONVIF PullPoint active ({sub_addr.split('/')[-1]})")
                 last_renew = time.time()
 

@@ -17,12 +17,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Probe ONVIF Profile M camera inventory")
     parser.add_argument("--host", default="192.168.1.100")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--rtsp-port", type=int, default=None, help="Forwarded RTSP port (e.g. 551 or 552)")
     parser.add_argument("--user", default="admin")
     parser.add_argument("--password", default="")
     parser.add_argument("--enable-metadata", action="store_true", help="Enable Analytics=true & Events in MetadataConfiguration")
     args = parser.parse_args()
 
-    client = ONVIFProfileMClient(args.host, args.port, args.user, args.password)
+    client = ONVIFProfileMClient(args.host, args.port, args.user, args.password, rtsp_port=args.rtsp_port)
     inv = client.connect()
     if args.enable_metadata and (not inv["analytics_enabled"] or not inv["events_enabled"]):
         inv["metadata_config"] = client.set_metadata_analytics_enabled(True, True)
